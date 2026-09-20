@@ -9,8 +9,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 add_executable(convert2pgn
-  src/main.cpp  
+  src/main.cpp
+  src/parsor.cpp 
 )
 
 target_include_directories(convert2pgn PRIVATE include include/convert2pgn)
-
