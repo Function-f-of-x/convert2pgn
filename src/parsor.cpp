@@ -3,11 +3,11 @@
 #include "parsor.hpp"
 
 #include <algorithm>
-#include <cerrno>
-#include <filesystem>
 #include <fstream>
 #include <print>
 #include <ranges>
+#include <regex>
+#include <sstream>
 
 #include "chess-library/chess.hpp"
 #include "configurator.hpp"
@@ -19,10 +19,11 @@ class ParsorVisitor : public chess::pgn::Visitor {
  private:
   bool validate = true;
   chess::Board board;
-  bool is_valid  = true;
-  
+  bool is_game_ended = false;
+
  public:
   int64_t halfmove_count = 0;
+  bool is_valid = true;
 
   ParsorVisitor() : Visitor() {}
 
@@ -35,14 +36,17 @@ class ParsorVisitor : public chess::pgn::Visitor {
     chess::Move move = chess::uci::parseSan(board, move_san);
     if (move == chess::Move::NO_MOVE || !board.isLegal(move)) {
       is_valid = false;
-      std::println(stderr, "Warning: Game file contaiins illegal moves or an unknown variant is used. Chess.com may not be able to parse the game.");
+      std::println(stderr, "Warning: Game file contains illegal moves or an unknown variant is used. Chess.com may not be able to parse the game.");
     } else {
       board.makeMove(move);
     }
   }
 
   void startPgn() override {
-    halfmove_count = 0;
+    if (is_game_ended) {
+      std::println(stderr, "Error parsing game file: can't have more than one game in a file");
+      throw ProgramError("more_than_one_game_in_pgn");
+    }
   }
   void header(std::string_view key, std::string_view value) override {
     if (key == "FEN") {
@@ -50,10 +54,12 @@ class ParsorVisitor : public chess::pgn::Visitor {
     }
   }
   void startMoves() override {}
-  void endPgn() override {}
+  void endPgn() override {
+    is_game_ended = true;
+  }
 };
 
-ProgramArgs parse_args(int argc, std::vector<std::string> argv) {
+ProgramArgs parse_args(std::vector<std::string>& raw_args) {
   ProgramArgs args;
   std::vector<std::string> raw_include_frames, raw_exclude_frames, raw_map_frames;
   int64_t last_frame = -1;
@@ -65,13 +71,13 @@ ProgramArgs parse_args(int argc, std::vector<std::string> argv) {
     include_frames,
     exclude_frames,
     map_frames,
-    frame_treshold
+    frame_threshold
   };
   Parsing now = Parsing::positional;
-  for (auto&& [index, arg] : argv | std::views::enumerate) {
-    if (index == 0) {
-      continue;
-    }
+
+  filter_args(raw_args);
+
+  for (auto&& [index, arg] : raw_args | std::views::enumerate) {
     if (arg.starts_with('-')) {
       if (arg == "--") {
         now = Parsing::positional;
@@ -93,96 +99,88 @@ ProgramArgs parse_args(int argc, std::vector<std::string> argv) {
         now = Parsing::exclude_frames;
       } else if (arg == "-mf" || arg == "--map-frames") {
         now = Parsing::map_frames;
-      } else if (arg == "--frame-treshold") {
-        now = Parsing::frame_treshold;
+      } else if (arg == "--frame-threshold") {
+        now = Parsing::frame_threshold;
       } else {
         std::println(stderr, "Invalid argument: {}\nTip: use --help to list all available arguments", arg);
         throw ProgramError("invalid_arg");
       }
       continue;
     }
+    if (arg.size() > 2 && arg.front() == '\'' && arg.back() == '\'') {
+      arg = arg.substr(1, arg.size() - 2);
+    }
     switch (now) {
-      if (arg != "") {
-        case Parsing::positional: {
-          args.input_files.push_back(arg);
-          args.has_input_files = true;
-          break;
+      case Parsing::positional: {
+        args.input_files.push_back(arg);
+        args.has_input_files = true;
+        break;
+      }
+      case Parsing::input: {
+        args.input_files.push_back(arg);
+        args.has_input_files = true;
+        break;
+      }
+      case Parsing::output: {
+        if (!args.has_output_file) {
+          args.output_file = arg;
+          args.has_output_file = true;
+        } else {
+          std::println(stderr, "Error parsing output file: you cannot have more than one output file");
+          throw ProgramError("more_than_one_output_file");
         }
-        case Parsing::input: {
-          args.input_files.push_back(arg);
-          args.has_input_files = true;
-          break;
+        break;
+      }
+      case Parsing::game: {
+        if (!args.has_game_file) {
+          args.game_file = arg;
+          args.has_game_file = true;
+        } else {
+          std::println(stderr, "Error parsing game file: you cannot have more than one game file");
+          throw ProgramError("more_than_one_game_file");
         }
-        case Parsing::output: {
-          if (args.has_output_file) {
-            args.output_file = arg;
-            args.has_output_file = true;
-          } else {
-            std::println(stderr, "Error parsing output file: you cannot have more than one output file");
-            throw ProgramError("more_than_one_output_file");
-          }
-          break;
-        }
-        case Parsing::game: {
-          if (args.has_game_file) {
-            args.game_file = arg;
-            args.has_game_file = true;
-          } else {
-            std::println(stderr, "Error parsing game file: you cannot have more than one game file");
-            throw ProgramError("more_than_one_game_file");
-          }
-          break;
-        }
-        case Parsing::include_frames: {
-          raw_include_frames.push_back(arg);
-          args.has_include_frames = true;
-          break;
-        }
-        case Parsing::exclude_frames: {
-          raw_exclude_frames.push_back(arg);
-          args.has_exclude_frames = true;
-          break;
-        }
-        case Parsing::map_frames: {
-          raw_map_frames.push_back(arg);
-          args.has_map_frames = true;
-          break;
-        }
-        case Parsing::frame_treshold: {
-          if (last_frame == -1) {
-            try {
-              last_frame = std::stoll(arg);
-              if (last_frame < 1) {
-                std::println(stderr, "Error parsing frame treshold: specified value is negative or zero.");
-                throw ProgramError("treshold_leq_zero");
-              }
-            } catch (const std::invalid_argument&) {
-              std::println(stderr, "Error parsing frame treshold: specified value is not a valid number.");
-              throw ProgramError("treshold_nan");
-            } catch (const std::out_of_range&) {
-              std::println(stderr, "Error parsing frame treshold: specified value exceeds max value of int64_t ({})", INT64_MAX);
-              throw ProgramError("treshold_out_of_range");
+        break;
+      }
+      case Parsing::include_frames: {
+        raw_include_frames.push_back(arg);
+        args.has_include_frames = true;
+        break;
+      }
+      case Parsing::exclude_frames: {
+        raw_exclude_frames.push_back(arg);
+        args.has_exclude_frames = true;
+        break;
+      }
+      case Parsing::map_frames: {
+        raw_map_frames.push_back(arg);
+        args.has_map_frames = true;
+        break;
+      }
+      case Parsing::frame_threshold: {
+        if (last_frame == -1) {
+          try {
+            last_frame = std::stoll(arg);
+            if (last_frame < 1) {
+              std::println(stderr, "Error parsing frame threshold: specified value is negative or zero.");
+              throw ProgramError("threshold_leq_zero");
             }
-          } else {
-            std::println(stderr, "Error parsing frame treshold: you cannot have more than one treshold");
-            throw ProgramError("more_than_one_treshold");
+          } catch (const std::invalid_argument&) {
+            std::println(stderr, "Error parsing frame threshold: specified value is not a valid number.");
+            throw ProgramError("threshold_nan");
+          } catch (const std::out_of_range&) {
+            std::println(stderr, "Error parsing frame threshold: specified value exceeds max value of int64_t ({})", INT64_MAX);
+            throw ProgramError("threshold_out_of_range");
           }
-          break;
+        } else {
+          std::println(stderr, "Error parsing frame threshold: you cannot have more than one threshold");
+          throw ProgramError("more_than_one_threshold");
         }
+        break;
       }
     }
   }
-  check_files(args);
+  check_files(args, last_frame);
 
-  if (args.has_game_file) {
-    std::ifstream game_file(args.game_file);
-    std::stringstream game;
-    game << game_file.rdbuf();
-    ParsorVisitor visitor(false);
-    chess::pgn::StreamParser counter(game);
-    counter.readGames(visitor);
-    last_frame = visitor.halfmove_count;
-  }
   if (args.has_include_frames) {
     args.include_frames = parse_frame_filter(raw_include_frames, "Include frames", last_frame);
   }
@@ -192,7 +190,37 @@ ProgramArgs parse_args(int argc, std::vector<std::string> argv) {
   return args;
 }
 
-std::vector<int64_t> parse_frame_filter(std::vector<std::string> raw_filters, std::string_view filter_type, int64_t last_frame) {
+void filter_args(std::vector<std::string>& raw_args) {
+  std::vector<std::string> filtered_args;
+  std::regex key_value_pattern(R"regex(^(--[a-zA-Z0-9-]+|-[a-zA-Z0-9-]+)=([\s\S]+)$)regex");
+  for (auto&& [index, arg] : raw_args | std::views::enumerate) {
+    if (index == 0) {
+      continue;
+    }
+    std::smatch key_value_matches;
+    StringTrim::trim(arg);
+    if (arg.empty()) {
+      continue;
+    } else if (std::regex_search(arg, key_value_matches, key_value_pattern)) {
+      filtered_args.push_back(key_value_matches[1]);
+      std::string values_str = key_value_matches[2].str();
+      if (values_str.size() > 2 && ((values_str.front() == '"' && values_str.back() == '"') || (values_str.front() == '\'' && values_str.back() == '\''))) {
+        values_str = values_str.substr(1, values_str.size() - 2);
+      }
+      std::vector<std::string> flag_values = values_str | std::views::split(' ') | std::ranges::to<std::vector<std::string>>();
+      for (auto& value : flag_values) {
+        value = "'" + value + "'";
+      }
+      filtered_args.insert_range(filtered_args.end(), flag_values);
+      filtered_args.push_back("--");
+    } else {
+      filtered_args.push_back(arg);
+    }
+  }
+  raw_args = filtered_args;
+}
+
+std::vector<int64_t> parse_frame_filter(const std::vector<std::string>& raw_filters, std::string_view filter_type, int64_t last_frame) {
   std::vector<int64_t> processed_filters;
   for (auto& filter : raw_filters) {
     std::vector<std::string> range = filter | std::views::split('~') | std::ranges::to<std::vector<std::string>>();
@@ -206,14 +234,15 @@ std::vector<int64_t> parse_frame_filter(std::vector<std::string> raw_filters, st
         processed_filters.push_back(frame);
       } else if (range.size() == 2) {
         int64_t range_start, range_end;
-        if (range.at(0) == "") {
+        if (range.at(0).empty()) {
           range_start = 1;
         } else {
           range_start = std::stoll(range.at(0));
         }
-        if (range.at(1) == "") {
+        if (range.at(1).empty()) {
           if (last_frame == -1) {
-            std::println(stderr, "Error parsiong {}: using open ranges with no game file provided results in a never ending loop. Use --frame-treshold to specify a treshold.", filter_type);
+            std::println(stderr, "Error parsing {}: using open ranges with no game file provided results in a never ending loop. Use --frame-threshold to specify a threshold.", filter_type);
+            throw ProgramError("filter_using_open_ranges_without_threshold");
           }
           range_end = last_frame;
         } else {
@@ -231,7 +260,11 @@ std::vector<int64_t> parse_frame_filter(std::vector<std::string> raw_filters, st
           processed_filters.push_back(i);
         }
       } else if (range.size() == 3) {
-        if (range.at(0) == "" && range.at(1) == "" && range.at(2) == "") {
+        if (range.at(0).empty() && range.at(1).empty() && range.at(2).empty()) {
+          if (last_frame == -1) {
+            std::println(stderr, "Error parsing {}: using open ranges with no game file provided results in a never ending loop. Use --frame-threshold to specify a threshold.", filter_type);
+            throw ProgramError("filter_using_open_ranges_without_threshold");
+          }
           for (int64_t i = 1; i <= last_frame; ++i) {
             processed_filters.push_back(i);
           }
@@ -261,7 +294,12 @@ std::vector<int64_t> parse_frame_filter(std::vector<std::string> raw_filters, st
   return processed_filters;
 }
 
-void check_files(ProgramArgs args) {
+void check_files(const ProgramArgs& args) {
+  int64_t dummy = 0;
+  check_files(args, dummy);
+}
+
+void check_files(const ProgramArgs& args, int64_t& last_frame) {
   if (args.has_input_files) {
     for (auto&& [index, path] : args.input_files | std::views::enumerate) {
       std::ifstream input_file;
@@ -269,10 +307,10 @@ void check_files(ProgramArgs args) {
       try {
         input_file.open(path);
         input_file.exceptions(std::ios_base::badbit);
-        (void)input_file.rdbuf();
+        uint8_t byte = input_file.get();
       } catch (std::ios_base::failure& e) {
-        std::println(stderr, "Error trying to open input file #{} ({}): {}", index, path, e.what());
-        throw ProgramError(std::format("input_file_error"));
+        std::println(stderr, "Error trying to open input file #{} ({}): {}\nTip: if your path contains spaces, wrap it in 'single quotes'", index, path, e.what());
+        throw ProgramError("input_file_error");
       }
       input_file.close();
     }
@@ -289,8 +327,14 @@ void check_files(ProgramArgs args) {
       ParsorVisitor visitor;
       chess::pgn::StreamParser validator(game);
       validator.readGames(visitor);
+      if (last_frame == -1) {
+        last_frame = visitor.halfmove_count;
+      } else if (last_frame > visitor.halfmove_count) {
+        last_frame = visitor.halfmove_count;
+        std::println(stderr, "Warning: frame threshold can't be bigger than amount of halfmoves in a game file and therefore is overwritten");
+      }
     } catch (std::ios_base::failure& e) {
-      std::println(stderr, "Error trying to open game file {}: {}", args.game_file, e.what());
+      std::println(stderr, "Error trying to open game file {}: {}\nTip: if your path contains spaces, wrap it in 'single quotes'", args.game_file, e.what());
       throw ProgramError("game_file_error");
     } catch (std::exception& e) {
       std::println(stderr, "Error trying to parse game file {}: {}", args.game_file, e.what());

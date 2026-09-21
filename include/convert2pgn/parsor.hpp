@@ -7,10 +7,12 @@ namespace Parsor {
 
 using namespace convert2pgn;
 
-ProgramArgs parse_args(int argc, std::vector<std::string>);
-std::vector<int> parse_frame_filter(std::vector<std::string>);
-std::vector<int> parse_map_frames(std::vector<std::string>);
-void check_files(ProgramArgs args);
+ProgramArgs parse_args(const std::vector<std::string>& raw_args);
+void filter_args(std::vector<std::string>& raw_args);
+std::vector<int64_t> parse_frame_filter(const std::vector<std::string>& raw_filters, std::string_view filter_type, int64_t last_frame = -1);
+std::vector<int64_t> parse_frame_mappings(const std::vector<std::string>& raw_mappings, int64_t last_frame = -1);
+void check_files(const ProgramArgs& args);
+void check_files(const ProgramArgs& args, int64_t& last_frame);
 void print_help();
 void print_version();
 

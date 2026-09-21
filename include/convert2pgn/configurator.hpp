@@ -11,6 +11,41 @@
 
 namespace convert2pgn {
 
+namespace StringTrim {
+
+inline const std::string WHITESPACE = " \t\n\r\f\v";
+
+inline std::string& rtrim(std::string& str, const std::string& t = WHITESPACE) {
+  str.erase(str.find_last_not_of(t) + 1);
+  return str;
+}
+
+inline std::string& ltrim(std::string& str, const std::string& t = WHITESPACE) {
+  str.erase(0, str.find_first_not_of(t));
+  return str;
+}
+
+inline std::string& trim(std::string& str, const std::string& t = WHITESPACE) {
+  return ltrim(rtrim(str, t), t);
+}
+
+inline std::string ltrim_copy(std::string str) {
+  ltrim(str);
+  return str;
+}
+
+inline std::string rtrim_copy(std::string str) {
+  rtrim(str);
+  return str;
+}
+
+inline std::string trim_copy(std::string str) {
+  trim(str);
+  return str;
+}
+
+}  // namespace StringTrim
+
 struct Pixel {
   uint8_t r, g, b, a;
 };
