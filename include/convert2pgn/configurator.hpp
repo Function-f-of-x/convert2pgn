@@ -8,6 +8,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <unordered_map>
 
 namespace convert2pgn {
 
@@ -56,7 +57,7 @@ struct ProgramArgs {
   std::string game_file;
   std::vector<int64_t> include_frames;
   std::vector<int64_t> exclude_frames;
-  std::vector<std::pair<int64_t, int64_t>> map_frames;
+  std::unordered_map<int64_t, int64_t> map_frames;
   bool has_input_files = false, has_output_file = false, has_game_file = false, has_include_frames = false, has_exclude_frames = false, has_map_frames = false;
   std::string code;
 };

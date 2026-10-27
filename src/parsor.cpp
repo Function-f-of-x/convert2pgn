@@ -220,83 +220,123 @@ void filter_args(std::vector<std::string>& raw_args) {
   raw_args = filtered_args;
 }
 
+std::vector<int64_t> parse_frame_range(const std::string& raw_range, std::string_view range_type, int64_t last_frame, bool validate_only = false) {
+  std::vector<int64_t> processed_range;
+  std::vector<std::string> range = raw_range | std::views::split('~') | std::ranges::to<std::vector<std::string>>();
+  try {
+    if (range.size() == 1) {
+      int64_t frame = std::stoll(range.at(0));
+      if (frame < 1) {
+        std::println(stderr, "Error parsing {}: one of the arguments is negative or zero.", range_type);
+        throw ProgramError("range_arg_leq_zero");
+      }
+      if (!validate_only) processed_range.push_back(frame);
+    } else if (range.size() == 2) {
+      int64_t range_start, range_end;
+      if (range.at(0).empty()) {
+        range_start = 1;
+      } else {
+        range_start = std::stoll(range.at(0));
+      }
+      if (range.at(1).empty()) {
+        if (last_frame == -1) {
+          std::println(stderr, "Error parsing {}: using open ranges with no game file provided results in a never ending loop. Use --frame-threshold to specify a threshold.", range_type);
+          throw ProgramError("range_open_without_threshold");
+        }
+        range_end = last_frame;
+      } else {
+        range_end = std::stoll(range.at(1));
+      }
+      if (range_start < 1 || range_end < 1) {
+        std::println(stderr, "Error parsing {}: one of the arguments is negative or zero.", range_type);
+        throw ProgramError("range_arg_leq_zero");
+      }
+      if (range_start > range_end) {
+        std::println(stderr, "Error parsing {}: start of range bigger than end of range.", range_type);
+        throw ProgramError("range_start_bigger_than_end");
+      }
+      if (!validate_only) {
+        for (int64_t i = range_start; i <= range_end; ++i) {
+          processed_range.push_back(i);
+        }
+      }
+    } else if (range.size() == 3) {
+      if (range.at(0).empty() && range.at(1).empty() && range.at(2).empty()) {
+        if (last_frame == -1) {
+          std::println(stderr, "Error parsing {}: using open ranges with no game file provided results in a never ending loop. Use --frame-threshold to specify a threshold.", range_type);
+          throw ProgramError("range_open_without_threshold");
+        }
+        if (!validate_only) {
+          for (int64_t i = 1; i <= last_frame; ++i) {
+            processed_range.push_back(i);
+          }
+        }
+      } else {
+        std::println(stderr, "Error parsing {}: too many separators", range_type);
+        throw ProgramError("range_arg_too_many_separators");
+      }
+    } else {
+      std::println(stderr, "Error parsing {}: too many separators", range_type);
+      throw ProgramError("range_arg_too_many_separators");
+    }
+  } catch (const std::invalid_argument&) {
+    std::println(stderr, "Error parsing {}: one of the arguments is not a valid number.", range_type);
+    throw ProgramError("range_arg_nan");
+  } catch (const std::out_of_range&) {
+    std::println(stderr, "Error parsing {}: one of the arguments exceeds max value of int64_t ({})", range_type, INT64_MAX);
+    throw ProgramError("range_arg_out_of_range");
+  }
+
+  return processed_range;
+}
+
 std::vector<int64_t> parse_frame_filter(const std::vector<std::string>& raw_filters, std::string_view filter_type, int64_t last_frame) {
   std::vector<int64_t> processed_filters;
   for (auto& filter : raw_filters) {
-    std::vector<std::string> range = filter | std::views::split('~') | std::ranges::to<std::vector<std::string>>();
-    try {
-      if (range.size() == 1) {
-        int64_t frame = std::stoll(range.at(0));
-        if (frame < 1) {
-          std::println(stderr, "Error parsing {}: one of the arguments is negative or zero.", filter_type);
-          throw ProgramError("filter_arg_leq_zero");
-        }
-        processed_filters.push_back(frame);
-      } else if (range.size() == 2) {
-        int64_t range_start, range_end;
-        if (range.at(0).empty()) {
-          range_start = 1;
-        } else {
-          range_start = std::stoll(range.at(0));
-        }
-        if (range.at(1).empty()) {
-          if (last_frame == -1) {
-            std::println(stderr, "Error parsing {}: using open ranges with no game file provided results in a never ending loop. Use --frame-threshold to specify a threshold.", filter_type);
-            throw ProgramError("filter_using_open_ranges_without_threshold");
-          }
-          range_end = last_frame;
-        } else {
-          range_end = std::stoll(range.at(1));
-        }
-        if (range_start < 1 || range_end < 1) {
-          std::println(stderr, "Error parsing {}: one of the arguments is negative or zero.", filter_type);
-          throw ProgramError("filter_arg_leq_zero");
-        }
-        if (range_start > range_end) {
-          std::println(stderr, "Error parsing {}: start of range bigger than end of range.", filter_type);
-          throw ProgramError("filter_range_start_bigger_than_end");
-        }
-        for (int64_t i = range_start; i <= range_end; ++i) {
-          processed_filters.push_back(i);
-        }
-      } else if (range.size() == 3) {
-        if (range.at(0).empty() && range.at(1).empty() && range.at(2).empty()) {
-          if (last_frame == -1) {
-            std::println(stderr, "Error parsing {}: using open ranges with no game file provided results in a never ending loop. Use --frame-threshold to specify a threshold.", filter_type);
-            throw ProgramError("filter_using_open_ranges_without_threshold");
-          }
-          for (int64_t i = 1; i <= last_frame; ++i) {
-            processed_filters.push_back(i);
-          }
-        } else {
-          std::println(stderr, "Error parsing {}: too many separators", filter_type);
-          throw ProgramError("filter_arg_too_many_separators");
-        }
-      } else {
-        std::println(stderr, "Error parsing {}: too many separators", filter_type);
-        throw ProgramError("filter_arg_too_many_separators");
-      }
-    } catch (const std::invalid_argument&) {
-      std::println(stderr, "Error parsing {}: one of the arguments is not a valid number.", filter_type);
-      throw ProgramError("filter_arg_nan");
-    } catch (const std::out_of_range&) {
-      std::println(stderr, "Error parsing {}: one of the arguments exceeds max value of int64_t ({})", filter_type, INT64_MAX);
-      throw ProgramError("filter_arg_out_of_range");
-    }
+    std::vector<int64_t> range = parse_frame_range(filter, filter_type, last_frame);
+    processed_filters.insert_range(processed_filters.end(), range);
   }
-
-  {
-    std::ranges::sort(processed_filters);
-    auto [first, last] = std::ranges::unique(processed_filters);
-    processed_filters.erase(first, last);
-  }
+  std::ranges::sort(processed_filters);
+  auto [first, last] = std::ranges::unique(processed_filters);
+  processed_filters.erase(first, last);
 
   return processed_filters;
 }
 
+std::unordered_map<int64_t, int64_t> parse_frame_mappings(const std::vector<std::string>& raw_mappings, int64_t last_frame) {
+  std::unordered_map<int64_t, int64_t> processed_mappings;
+  for (auto& mapping : raw_mappings) {
+    std::vector<std::string> split_mapping = mapping | std::views::split(':') | std::ranges::to<std::vector<std::string>>();
+    if (split_mapping.size() != 2) {
+      std::println(stderr, "Error parsing Map frames: map must have exactly 1 map separator");
+      throw ProgramError("mapping_arg_invalid_separators");
+    }
+    for (auto& range : split_mapping) {
+      parse_frame_range(range, "Map frames", last_frame, true);
+    }
+    std::vector<std::string> mapping_frame_range_str = split_mapping[0] | std::views::split('~') | std::ranges::to<std::vector<std::string>>(),
+                             mapping_move_range_str = split_mapping[1] | std::views::split('~') | std::ranges::to<std::vector<std::string>>();
+    std::vector<int64_t> mapping_frame_range, mapping_move_range;
+    for (auto& value : mapping_frame_range_str) {
+      mapping_frame_range.push_back(std::stoll(value));
+    }
+    for (auto& value : mapping_move_range_str) {
+      mapping_move_range.push_back(std::stoll(value));
+    }
+
+    if (mapping_frame_range.size() == 1 && mapping_move_range.size() == 1) {
+      processed_mappings[mapping_move_range[0]] = mapping_frame_range[0];
+    } else if (mapping_frame_range.size() == 2 && mapping_move_range.size() == 1) {
+      for (int i = mapping_move_range[0]; i <= mapping_move_range[0] + (mapping_frame_range[1] - mapping_frame_range[0]); i++) {
+
+      }
+    }
+  }
+}
+
 void check_files(const ProgramArgs& args) {
-  int64_t dummy = 0;
-  check_files(args, dummy);
+  int64_t i_am_a_cute_kittty_nya_OwO = 0xDEADC0DE & 0xB00B5;  // lol
+  check_files(args, i_am_a_cute_kittty_nya_OwO);
 }
 
 void check_files(const ProgramArgs& args, int64_t& last_frame) {
