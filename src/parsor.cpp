@@ -311,24 +311,18 @@ std::unordered_map<int64_t, int64_t> parse_frame_mappings(const std::vector<std:
       std::println(stderr, "Error parsing Map frames: map must have exactly 1 map separator");
       throw ProgramError("mapping_arg_invalid_separators");
     }
-    for (auto& range : split_mapping) {
-      parse_frame_range(range, "Map frames", last_frame, true);
-    }
-    std::vector<std::string> mapping_frame_range_str = split_mapping[0] | std::views::split('~') | std::ranges::to<std::vector<std::string>>(),
-                             mapping_move_range_str = split_mapping[1] | std::views::split('~') | std::ranges::to<std::vector<std::string>>();
-    std::vector<int64_t> mapping_frame_range, mapping_move_range;
-    for (auto& value : mapping_frame_range_str) {
-      mapping_frame_range.push_back(std::stoll(value));
-    }
-    for (auto& value : mapping_move_range_str) {
-      mapping_move_range.push_back(std::stoll(value));
-    }
+    std::vector<int64_t> mapping_frame_range = parse_frame_range(split_mapping[0], "Map frames", last_frame),
+                         mapping_move_range = parse_frame_range(split_mapping[1], "Map frames", last_frame);
 
     if (mapping_frame_range.size() == 1 && mapping_move_range.size() == 1) {
-      processed_mappings[mapping_move_range[0]] = mapping_frame_range[0];
-    } else if (mapping_frame_range.size() == 2 && mapping_move_range.size() == 1) {
-      for (int i = mapping_move_range[0]; i <= mapping_move_range[0] + (mapping_frame_range[1] - mapping_frame_range[0]); i++) {
-
+      processed_mappings.insert(mapping_move_range[0], mapping_frame_range[0]);
+    } else if (mapping_frame_range.size() > 1 && mapping_move_range.size() == 1) {
+      for (int64_t i = 0; i <= mapping_frame_range.back() - mapping_frame_range[0]; i++) {
+        processed_mappings.insert(mapping_move_range[0] + i, mapping_frame_range[i]);
+      }
+    } else if (mapping_frame_range.size() >= 1 && mapping_move_range.size() > 1) {
+      for (int64_t i = 0; i <= mapping_move_range.back() - mapping_move_range[0]; i++) {
+        processed_mappings.insert(mapping_move_range[0] + i, mapping_frame_range[i % mapping_frame_range.size()]);
       }
     }
   }
