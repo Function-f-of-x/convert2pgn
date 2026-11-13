@@ -6,7 +6,6 @@
 #include <fstream>
 #include <print>
 #include <ranges>
-#include <regex>
 #include <sstream>
 
 #include "chess-library/chess.hpp"
@@ -71,16 +70,17 @@ ProgramArgs parse_args(std::vector<std::string>& raw_args) {
     include_frames,
     exclude_frames,
     map_frames,
-    frame_threshold
+    frame_threshold,
+    filenames
   };
   Parsing now = Parsing::positional;
 
   filter_args(raw_args);
 
   for (auto&& [index, arg] : raw_args | std::views::enumerate) {
-    if (arg.starts_with('-')) {
+    if (arg.starts_with('-') && now != Parsing::filenames) {
       if (arg == "--") {
-        now = Parsing::positional;
+        now = Parsing::filenames;
       } else if (arg == "--help") {
         print_help();
         return {};
@@ -102,7 +102,7 @@ ProgramArgs parse_args(std::vector<std::string>& raw_args) {
       } else if (arg == "--frame-threshold") {
         now = Parsing::frame_threshold;
       } else {
-        std::println(stderr, "Invalid argument: {}\nTip: use --help to list all available arguments", arg);
+        std::println(stderr, "Invalid argument: {}\nTip: use --help to list all available arguments\nTip 2: if your file starts with a dash, prefix it with ./ (on linux) or with .\\ and wrap it in \"double quotes\" (on windows)", arg);
         throw ProgramError("invalid_arg");
       }
       continue;
@@ -112,13 +112,33 @@ ProgramArgs parse_args(std::vector<std::string>& raw_args) {
     }
     switch (now) {
       case Parsing::positional: {
-        args.input_files.push_back(arg);
-        args.has_input_files = true;
+        if (!args.has_input_file) {
+          args.input_file = arg;
+          args.has_input_file = true;
+        } else {
+          std::println(stderr, "Error parsing input file: you cannot have more than one input file.\nTip: If you want to use a sequance of images, specify a file pattern e.g. 'frames/frame_%04d.png', where %04d means a 4 digit number with leading zeros (0000, 0001, 0002...)");
+          throw ProgramError("more_than_one_input_file");
+        }
         break;
       }
       case Parsing::input: {
-        args.input_files.push_back(arg);
-        args.has_input_files = true;
+        if (!args.has_input_file) {
+          args.input_file = arg;
+          args.has_input_file = true;
+        } else {
+          std::println(stderr, "Error parsing input file: you cannot have more than one input file.\nTip: If you want to use a sequance of images, specify a file pattern e.g. 'frames/frame_%04d.png', where %04d means a 4 digit number with leading zeros (0000, 0001, 0002...)");
+          throw ProgramError("more_than_one_input_file");
+        }
+        break;
+      }
+      case Parsing::filenames: {
+        if (!args.has_input_file) {
+          args.input_file = arg;
+          args.has_input_file = true;
+        } else {
+          std::println(stderr, "Error parsing input file: you cannot have more than one input file.\nTip: If you want to use a sequance of images, specify a file pattern e.g. 'frames/frame_%04d.png', where %04d means a 4 digit number with leading zeros (0000, 0001, 0002...)");
+          throw ProgramError("more_than_one_input_file");
+        }
         break;
       }
       case Parsing::output: {
@@ -187,32 +207,26 @@ ProgramArgs parse_args(std::vector<std::string>& raw_args) {
   if (args.has_exclude_frames) {
     args.exclude_frames = parse_frame_filter(raw_exclude_frames, "Exclude frames", last_frame);
   }
+  if (args.has_map_frames) {
+    args.map_frames = parse_frame_mappings(raw_map_frames, last_frame);
+  }
   return args;
 }
 
 void filter_args(std::vector<std::string>& raw_args) {
+  merge_single_quotes(raw_args);
   std::vector<std::string> filtered_args;
-  std::regex key_value_pattern(R"regex(^(--[a-zA-Z0-9-]+|-[a-zA-Z0-9-]+)=([\s\S]+)$)regex");
-  for (auto&& [index, arg] : raw_args | std::views::enumerate) {
+  for (const auto&& [index, arg] : raw_args | std::views::enumerate) {
     if (index == 0) {
       continue;
     }
-    std::smatch key_value_matches;
     StringTrim::trim(arg);
     if (arg.empty()) {
       continue;
-    } else if (std::regex_search(arg, key_value_matches, key_value_pattern)) {
-      filtered_args.push_back(key_value_matches[1]);
-      std::string values_str = key_value_matches[2].str();
-      if (values_str.size() > 2 && ((values_str.front() == '"' && values_str.back() == '"') || (values_str.front() == '\'' && values_str.back() == '\''))) {
-        values_str = values_str.substr(1, values_str.size() - 2);
-      }
-      std::vector<std::string> flag_values = values_str | std::views::split(' ') | std::ranges::to<std::vector<std::string>>();
-      for (auto& value : flag_values) {
-        value = "'" + value + "'";
-      }
-      filtered_args.insert_range(filtered_args.end(), flag_values);
-      filtered_args.push_back("--");
+    }
+    if (arg.starts_with("-") && arg.contains("=")) {
+      std::println(stderr, "Error parsing flags: --key=value format is not supported, use --key value");
+      throw ProgramError("invalid_arg");
     } else {
       filtered_args.push_back(arg);
     }
@@ -220,7 +234,35 @@ void filter_args(std::vector<std::string>& raw_args) {
   raw_args = filtered_args;
 }
 
-std::vector<int64_t> parse_frame_range(const std::string& raw_range, std::string_view range_type, int64_t last_frame, bool validate_only = false) {
+void merge_single_quotes(std::vector<std::string>& raw_args) {
+  std::vector<std::string> merged_args;
+  bool looking_for_single_quote = false;
+  std::string single_quoted_arg = "";
+  for (const auto& arg : raw_args) {
+    if (arg.starts_with("'") && !arg.ends_with("'") && !looking_for_single_quote) {
+      looking_for_single_quote = true;
+      single_quoted_arg += arg;
+      continue;
+    }
+    if (looking_for_single_quote) {
+      single_quoted_arg += arg + " ";
+      if (arg.ends_with("'")) {
+        looking_for_single_quote = false;
+      } else {
+        continue;
+      }
+    }
+    if (!single_quoted_arg.empty()) {
+      merged_args.push_back(single_quoted_arg);
+      single_quoted_arg = "";
+    } else {
+      merged_args.push_back(arg);
+    }
+  }
+  raw_args = merged_args;
+}
+
+std::vector<int64_t> parse_frame_range(const std::string& raw_range, std::string_view range_type, int64_t last_frame) {
   std::vector<int64_t> processed_range;
   std::vector<std::string> range = raw_range | std::views::split('~') | std::ranges::to<std::vector<std::string>>();
   try {
@@ -230,7 +272,7 @@ std::vector<int64_t> parse_frame_range(const std::string& raw_range, std::string
         std::println(stderr, "Error parsing {}: one of the arguments is negative or zero.", range_type);
         throw ProgramError("range_arg_leq_zero");
       }
-      if (!validate_only) processed_range.push_back(frame);
+      processed_range.push_back(frame);
     } else if (range.size() == 2) {
       int64_t range_start, range_end;
       if (range.at(0).empty()) {
@@ -255,10 +297,8 @@ std::vector<int64_t> parse_frame_range(const std::string& raw_range, std::string
         std::println(stderr, "Error parsing {}: start of range bigger than end of range.", range_type);
         throw ProgramError("range_start_bigger_than_end");
       }
-      if (!validate_only) {
-        for (int64_t i = range_start; i <= range_end; ++i) {
-          processed_range.push_back(i);
-        }
+      for (int64_t i = range_start; i <= range_end; ++i) {
+        processed_range.push_back(i);
       }
     } else if (range.size() == 3) {
       if (range.at(0).empty() && range.at(1).empty() && range.at(2).empty()) {
@@ -266,11 +306,11 @@ std::vector<int64_t> parse_frame_range(const std::string& raw_range, std::string
           std::println(stderr, "Error parsing {}: using open ranges with no game file provided results in a never ending loop. Use --frame-threshold to specify a threshold.", range_type);
           throw ProgramError("range_open_without_threshold");
         }
-        if (!validate_only) {
-          for (int64_t i = 1; i <= last_frame; ++i) {
-            processed_range.push_back(i);
-          }
+
+        for (int64_t i = 1; i <= last_frame; ++i) {
+          processed_range.push_back(i);
         }
+
       } else {
         std::println(stderr, "Error parsing {}: too many separators", range_type);
         throw ProgramError("range_arg_too_many_separators");
@@ -305,7 +345,7 @@ std::vector<int64_t> parse_frame_filter(const std::vector<std::string>& raw_filt
 
 std::unordered_map<int64_t, int64_t> parse_frame_mappings(const std::vector<std::string>& raw_mappings, int64_t last_frame) {
   std::unordered_map<int64_t, int64_t> processed_mappings;
-  for (auto& mapping : raw_mappings) {
+  for (const auto& mapping : raw_mappings) {
     std::vector<std::string> split_mapping = mapping | std::views::split(':') | std::ranges::to<std::vector<std::string>>();
     if (split_mapping.size() != 2) {
       std::println(stderr, "Error parsing Map frames: map must have exactly 1 map separator");
@@ -315,41 +355,33 @@ std::unordered_map<int64_t, int64_t> parse_frame_mappings(const std::vector<std:
                          mapping_move_range = parse_frame_range(split_mapping[1], "Map frames", last_frame);
 
     if (mapping_frame_range.size() == 1 && mapping_move_range.size() == 1) {
-      processed_mappings.insert(mapping_move_range[0], mapping_frame_range[0]);
+      processed_mappings.insert_or_assign(mapping_move_range[0], mapping_frame_range[0]);
     } else if (mapping_frame_range.size() > 1 && mapping_move_range.size() == 1) {
-      for (int64_t i = 0; i <= mapping_frame_range.back() - mapping_frame_range[0]; i++) {
-        processed_mappings.insert(mapping_move_range[0] + i, mapping_frame_range[i]);
+      for (int64_t i = 0; i < mapping_frame_range.size(); i++) {
+        processed_mappings.insert_or_assign(mapping_move_range[0] + i, mapping_frame_range[i]);
       }
     } else if (mapping_frame_range.size() >= 1 && mapping_move_range.size() > 1) {
-      for (int64_t i = 0; i <= mapping_move_range.back() - mapping_move_range[0]; i++) {
-        processed_mappings.insert(mapping_move_range[0] + i, mapping_frame_range[i % mapping_frame_range.size()]);
+      for (int64_t i = 0; i < mapping_move_range.size(); i++) {
+        processed_mappings.insert_or_assign(mapping_move_range[i], mapping_frame_range[i % mapping_frame_range.size()]);
       }
     }
   }
+  if (!processed_mappings.empty()) {
+    for (int64_t i = 0; i <= std::ranges::max(processed_mappings | std::views::keys); ++i) {
+      if (!processed_mappings.contains(i)) {
+        processed_mappings.insert_or_assign(i, 0);
+      }
+    }
+  }
+  return processed_mappings;
 }
 
 void check_files(const ProgramArgs& args) {
-  int64_t i_am_a_cute_kittty_nya_OwO = 0xDEADC0DE & 0xB00B5;  // lol
+  int64_t i_am_a_cute_kittty_nya_OwO = 0xDEADC0DE & 0xB00B5;
   check_files(args, i_am_a_cute_kittty_nya_OwO);
 }
 
 void check_files(const ProgramArgs& args, int64_t& last_frame) {
-  if (args.has_input_files) {
-    for (auto&& [index, path] : args.input_files | std::views::enumerate) {
-      std::ifstream input_file;
-      input_file.exceptions(std::ios_base::failbit | std::ios_base::badbit);
-      try {
-        input_file.open(path);
-        input_file.exceptions(std::ios_base::badbit);
-        uint8_t byte = input_file.get();
-      } catch (std::ios_base::failure& e) {
-        std::println(stderr, "Error trying to open input file #{} ({}): {}\nTip: if your path contains spaces, wrap it in 'single quotes'", index, path, e.what());
-        throw ProgramError("input_file_error");
-      }
-      input_file.close();
-    }
-  }
-
   if (args.has_game_file) {
     try {
       std::ifstream game_file;
