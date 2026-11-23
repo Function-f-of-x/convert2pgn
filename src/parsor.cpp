@@ -129,6 +129,7 @@ ProgramArgs parse_args(std::vector<std::string>& raw_args) {
           std::println(stderr, "Error parsing input file: you cannot have more than one input file.\nTip: If you want to use a sequance of images, specify a file pattern e.g. 'frames/frame_%04d.png', where %04d means a 4 digit number with leading zeros (0000, 0001, 0002...)");
           throw ProgramError("more_than_one_input_file");
         }
+        now = Parsing::positional;
         break;
       }
       case Parsing::filenames: {
@@ -149,6 +150,7 @@ ProgramArgs parse_args(std::vector<std::string>& raw_args) {
           std::println(stderr, "Error parsing output file: you cannot have more than one output file");
           throw ProgramError("more_than_one_output_file");
         }
+        now = Parsing::positional;
         break;
       }
       case Parsing::game: {
@@ -159,6 +161,7 @@ ProgramArgs parse_args(std::vector<std::string>& raw_args) {
           std::println(stderr, "Error parsing game file: you cannot have more than one game file");
           throw ProgramError("more_than_one_game_file");
         }
+        now = Parsing::positional;
         break;
       }
       case Parsing::include_frames: {
@@ -195,9 +198,13 @@ ProgramArgs parse_args(std::vector<std::string>& raw_args) {
           std::println(stderr, "Error parsing frame threshold: you cannot have more than one threshold");
           throw ProgramError("more_than_one_threshold");
         }
+        now = Parsing::positional;
         break;
       }
     }
+  }
+  if (args.input_file.contains("%")) {
+    
   }
   check_files(args, last_frame);
 
@@ -216,7 +223,7 @@ ProgramArgs parse_args(std::vector<std::string>& raw_args) {
 void filter_args(std::vector<std::string>& raw_args) {
   merge_single_quotes(raw_args);
   std::vector<std::string> filtered_args;
-  for (const auto&& [index, arg] : raw_args | std::views::enumerate) {
+  for (auto&& [index, arg] : raw_args | std::views::enumerate) {
     if (index == 0) {
       continue;
     }
@@ -245,7 +252,7 @@ void merge_single_quotes(std::vector<std::string>& raw_args) {
       continue;
     }
     if (looking_for_single_quote) {
-      single_quoted_arg += arg + " ";
+      single_quoted_arg += " " + arg;
       if (arg.ends_with("'")) {
         looking_for_single_quote = false;
       } else {
@@ -258,6 +265,10 @@ void merge_single_quotes(std::vector<std::string>& raw_args) {
     } else {
       merged_args.push_back(arg);
     }
+  }
+  if (looking_for_single_quote) {
+    std::println(stderr, "Error parsing flags: single quote is 'not closed");
+    throw ProgramError("invalid_arg");
   }
   raw_args = merged_args;
 }
@@ -377,7 +388,7 @@ std::unordered_map<int64_t, int64_t> parse_frame_mappings(const std::vector<std:
 }
 
 void check_files(const ProgramArgs& args) {
-  int64_t i_am_a_cute_kittty_nya_OwO = 0xDEADC0DE & 0xB00B5;
+  int64_t i_am_a_cute_kittty_nya_OwO = -static_cast<int64_t>(0xDEADC0DE & 0xB00B5) >> 63;
   check_files(args, i_am_a_cute_kittty_nya_OwO);
 }
 
@@ -402,6 +413,8 @@ void check_files(const ProgramArgs& args, int64_t& last_frame) {
     } catch (std::ios_base::failure& e) {
       std::println(stderr, "Error trying to open game file {}: {}\nTip: if your path contains spaces, wrap it in 'single quotes'", args.game_file, e.what());
       throw ProgramError("game_file_error");
+    } catch (ProgramError&) {
+      throw;
     } catch (std::exception& e) {
       std::println(stderr, "Error trying to parse game file {}: {}", args.game_file, e.what());
       throw ProgramError("game_file_error");

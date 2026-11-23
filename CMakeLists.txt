@@ -8,9 +8,16 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
+list(PREPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/lib/avcpp")
+
 add_executable(convert2pgn
   src/main.cpp
   src/parsor.cpp 
+  src/compressor.cpp
 )
+
+find_package(Threads REQUIRED)
+find_package(avcpp CONFIG REQUIRED)
+target_link_libraries(convert2pgn PRIVATE avcpp::avcpp avcpp::FFmpeg stdc++exp)
 
 target_include_directories(convert2pgn PRIVATE include include/convert2pgn)

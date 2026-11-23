@@ -1,0 +1,19 @@
+{
+  "packages": [
+{
+  "SPDXID" : "SPDXRef-resource-0",
+  "checksums" : 
+  [
+    {
+      "algorithm" : "SHA512",
+      "checksumValue" : "f23102b3404aad89fe0bf1b7b19c72b09771c55c58043954999afbead7b2e68a4cd807073596c5d39b328fb17c69d23f9e64f86e8092a1b059c05bb6c2df82a7"
+    }
+  ],
+  "copyrightText" : "NOASSERTION",
+  "downloadLocation" : "git+https://github.com/h4tr3d/avcpp@v3.0.1",
+  "licenseConcluded" : "NOASSERTION",
+  "licenseDeclared" : "NOASSERTION",
+  "name" : "h4tr3d/avcpp"
+}
+  ]
+}

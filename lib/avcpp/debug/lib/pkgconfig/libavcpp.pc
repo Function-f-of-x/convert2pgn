@@ -1,0 +1,15 @@
+prefix=${pcfiledir}/../..
+exec_prefix=${prefix}
+libdir=${prefix}/
+includedir=${prefix}/
+
+Name: libavcpp
+Description: FFmpeg libraries C++ interface
+Version: 3.0.1
+Conflicts:
+
+
+
+Libs: "-L${libdir}" -lavcpp -lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32
+Requires: libavcodec >= 62.28.102, libavutil >= 60.26.102, libswscale >= 9.5.102, libswresample >= 6.3.102, libavformat >= 62.12.102, libavfilter >= 11.14.102, libavdevice >= 62.3.102 
+Cflags: "-I${includedir}"

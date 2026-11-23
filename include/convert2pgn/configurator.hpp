@@ -14,34 +14,34 @@ namespace convert2pgn {
 
 namespace StringTrim {
 
-inline const std::string WHITESPACE = " \t\n\r\f\v";
+constexpr std::string_view WHITESPACE = " \t\n\r\f\v";
 
-inline std::string& rtrim(std::string& str, const std::string& t = WHITESPACE) {
+inline std::string& rtrim(std::string& str, const std::string_view& t = WHITESPACE) {
   str.erase(str.find_last_not_of(t) + 1);
   return str;
 }
 
-inline std::string& ltrim(std::string& str, const std::string& t = WHITESPACE) {
+inline std::string& ltrim(std::string& str, const std::string_view& t = WHITESPACE) {
   str.erase(0, str.find_first_not_of(t));
   return str;
 }
 
-inline std::string& trim(std::string& str, const std::string& t = WHITESPACE) {
+inline std::string& trim(std::string& str, const std::string_view& t = WHITESPACE) {
   return ltrim(rtrim(str, t), t);
 }
 
-inline std::string ltrim_copy(std::string str) {
-  ltrim(str);
+inline std::string ltrim_copy(std::string str, const std::string_view& t = WHITESPACE) {
+  ltrim(str, t);
   return str;
 }
 
-inline std::string rtrim_copy(std::string str) {
-  rtrim(str);
+inline std::string rtrim_copy(std::string str, const std::string_view& t = WHITESPACE) {
+  rtrim(str, t);
   return str;
 }
 
-inline std::string trim_copy(std::string str) {
-  trim(str);
+inline std::string trim_copy(std::string str, const std::string_view& t = WHITESPACE) {
+  trim(str, t);
   return str;
 }
 
@@ -64,7 +64,7 @@ struct ProgramArgs {
 using RawVideo = std::vector<std::array<std::array<Pixel, 8>, 8>>;
 
 template <typename... Args>
-void print_debug(std::format_string<Args...> str, Args&&... args) {
+void print_debug([[maybe_unused]] std::format_string<Args...> str, [[maybe_unused]] Args&&... args) {
 #ifndef NDEBUG
   std::println(str, std::forward<Args>(args)...);
 #endif
