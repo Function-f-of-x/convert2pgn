@@ -204,7 +204,7 @@ ProgramArgs parse_args(std::vector<std::string>& raw_args) {
     }
   }
   if (args.input_file.contains("%")) {
-    
+    args.is_input_image_sequence = true;
   }
   check_files(args, last_frame);
 
