@@ -6,9 +6,7 @@
 #include <system_error>
 
 #include "configurator.hpp"
-namespace Compressor {
-
-using namespace convert2pgn;
+namespace convert2pgn::Compressor {
 
 void compress(const ProgramArgs& args) {
   std::error_code error;

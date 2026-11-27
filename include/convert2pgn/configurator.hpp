@@ -79,14 +79,15 @@ class ProgramError : public std::runtime_error {
 };
 
 namespace LogLevel {
-  enum Type : uint8_t {
-    FATAL = 1,
-    ERROR = 2,
-    WARN = 3,
-    INFO = 4,
-    DEBUG = 5,
-    TRACE = 6,
-  };
+enum Type : uint8_t {
+  SILENT = 0,
+  FATAL = 1,
+  ERROR = 2,
+  WARN = 3,
+  INFO = 4,
+  DEBUG = 5,
+  TRACE = 6,
+};
 }
 
 class Logger {
@@ -98,39 +99,53 @@ class Logger {
     caller_ = caller;
   }
 
+  void set_verbose(const bool verbose) {
+    verbose_ = verbose;
+  }
+
   void set_max_log_level(const LogLevel::Type level) {
     max_log_level_ = level;
   }
 
-  Logger with_caller(const std::string_view caller) {
+  const Logger with_caller(const std::string_view caller) {
     Logger logger(max_log_level_, verbose_);
     logger.set_caller(caller);
     return logger;
   }
 
+  const Logger with_verbosity(const bool verbose) {
+    Logger logger(max_log_level_, verbose);
+    logger.set_caller(caller_);
+    return logger;
+  }
+
   template <typename... Args>
   void log(std::string_view caller, LogLevel::Type level, std::format_string<Args...> str, Args&&... args) {
-    if (level > max_log_level_) {
+    if (level > max_log_level_ || level == LogLevel::SILENT) {
       return;
     }
 
-    std::string formatted;
+    auto lines = std::format(str, std::forward<Args>(args)...) | std::views::split('\n') | std::ranges::to<std::vector<std::string>>();
 
-    if (verbose_) {
-      auto utc = std::chrono::floor<std::chrono::milliseconds>(std::chrono::system_clock::now());
-      auto now = std::chrono::zoned_time(std::chrono::current_zone(), utc);
-      formatted += std::format("{}[{:%T}] [{}/{}]: ", log_level_to_ansi(level), now, caller, log_level_to_string(level));
-    } else if (level <= LogLevel::WARN) {
-      formatted += std::format("{}[{}/{}]: ", log_level_to_ansi(level), caller, log_level_to_string(level));
+    for (const auto& line : lines) {
+      std::string formatted_line;
+
+      if (verbose_) {
+        auto utc = std::chrono::floor<std::chrono::milliseconds>(std::chrono::system_clock::now());
+        auto now = std::chrono::zoned_time(std::chrono::current_zone(), utc);
+        formatted_line += std::format("{}[{:%T}] [{}/{}]: ", log_level_to_ansi(level), now, caller, log_level_to_string(level));
+      } else if (level <= LogLevel::WARN) {
+        formatted_line += std::format("{}[{}/{}]: ", log_level_to_ansi(level), caller, log_level_to_string(level));
+      }
+
+      formatted_line += line;
+
+      if (!log_level_to_ansi(level).empty()) {
+        formatted_line += "\x1b[0m";
+      }
+
+      std::println("{}", formatted_line);
     }
-
-    formatted += std::format(str, std::forward<Args>(args)...);
-
-    if (!log_level_to_ansi(level).empty()) {
-      formatted += "\x1b[0m";
-    }
-
-    std::print(formatted);
   }
 
   template <typename... Args>
@@ -225,5 +240,7 @@ class Logger {
     }
   }
 };
+
+inline Logger g_logger;
 
 }  // namespace convert2pgn

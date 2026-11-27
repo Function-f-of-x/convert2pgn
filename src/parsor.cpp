@@ -11,8 +11,7 @@
 #include "chess-library/chess.hpp"
 #include "configurator.hpp"
 
-namespace Parsor {
-using namespace convert2pgn;
+namespace convert2pgn::Parsor {
 
 class ParsorVisitor : public chess::pgn::Visitor {
  private:
@@ -24,26 +23,28 @@ class ParsorVisitor : public chess::pgn::Visitor {
   int64_t halfmove_count = 0;
   bool is_valid = true;
 
-  ParsorVisitor() : Visitor() {}
+  ParsorVisitor() : Visitor() { g_logger.trace("Constructed ParsorVisitor with default contructor"); }
 
-  ParsorVisitor(bool validate) : Visitor(), validate(validate) {}
+  ParsorVisitor(bool validate) : Visitor(), validate(validate) { g_logger.trace("Constructed ParsorVisitor with validate contructor (validate={})", validate); }
 
   void move(std::string_view move_san, std::string_view comment) override {
+    g_logger.trace("Entered convert2pgn::Parsor::ParsorVisitor::move");
     ++halfmove_count;
     if (!is_valid || !validate) return;
 
     chess::Move move = chess::uci::parseSan(board, move_san);
     if (move == chess::Move::NO_MOVE || !board.isLegal(move)) {
       is_valid = false;
-      std::println(stderr, "Warning: Game file contains illegal moves or an unknown variant is used. Chess.com may not be able to parse the game.");
+      g_logger.warn("Warning: Game file contains illegal moves or an unknown variant is used. Chess.com may not be able to parse the game.");
     } else {
       board.makeMove(move);
     }
+    g_logger.trace("Exited convert2pgn::Parsor::ParsorVisitor::move");
   }
 
   void startPgn() override {
     if (is_game_ended) {
-      std::println(stderr, "Error parsing game file: can't have more than one game in a file");
+      g_logger.fatal("Error parsing game file: can't have more than one game in a file");
       throw ProgramError("more_than_one_game_in_pgn");
     }
   }
@@ -59,6 +60,7 @@ class ParsorVisitor : public chess::pgn::Visitor {
 };
 
 ProgramArgs parse_args(std::vector<std::string>& raw_args) {
+  g_logger.trace("Entered convert2pgn::Parsor::parse_args");
   ProgramArgs args;
   std::vector<std::string> raw_include_frames, raw_exclude_frames, raw_map_frames;
   int64_t last_frame = -1;
@@ -76,9 +78,11 @@ ProgramArgs parse_args(std::vector<std::string>& raw_args) {
   Parsing now = Parsing::positional;
 
   filter_args(raw_args);
-
+  
+  g_logger.trace("Start parsing args");
   for (auto&& [index, arg] : raw_args | std::views::enumerate) {
     if (arg.starts_with('-') && now != Parsing::filenames) {
+      g_logger.trace("Flag '{}' detected", arg);
       if (arg == "--") {
         now = Parsing::filenames;
       } else if (arg == "--help") {
@@ -102,7 +106,7 @@ ProgramArgs parse_args(std::vector<std::string>& raw_args) {
       } else if (arg == "--frame-threshold") {
         now = Parsing::frame_threshold;
       } else {
-        std::println(stderr, "Invalid argument: {}\nTip: use --help to list all available arguments\nTip 2: if your file starts with a dash, prefix it with ./ (on linux) or with .\\ and wrap it in \"double quotes\" (on windows)", arg);
+        g_logger.fatal("Invalid argument: {}\nTip: use --help to list all available arguments", arg);
         throw ProgramError("invalid_arg");
       }
       continue;
@@ -112,53 +116,58 @@ ProgramArgs parse_args(std::vector<std::string>& raw_args) {
     }
     switch (now) {
       case Parsing::positional: {
+        g_logger.trace("Input file (positional) '{}' detected", arg);
         if (!args.has_input_file) {
           args.input_file = arg;
           args.has_input_file = true;
         } else {
-          std::println(stderr, "Error parsing input file: you cannot have more than one input file.\nTip: If you want to use a sequance of images, specify a file pattern e.g. 'frames/frame_%04d.png', where %04d means a 4 digit number with leading zeros (0000, 0001, 0002...)");
+          g_logger.fatal("Error parsing input file: you cannot have more than one input file.\nTip: If you want to use a sequance of images, specify a file pattern e.g. 'frames/frame_%04d.png', where %04d means a 4 digit number with leading zeros (0000, 0001, 0002...)");
           throw ProgramError("more_than_one_input_file");
         }
         break;
       }
       case Parsing::input: {
+        g_logger.trace("Input file '{}' detected", arg);
         if (!args.has_input_file) {
           args.input_file = arg;
           args.has_input_file = true;
         } else {
-          std::println(stderr, "Error parsing input file: you cannot have more than one input file.\nTip: If you want to use a sequance of images, specify a file pattern e.g. 'frames/frame_%04d.png', where %04d means a 4 digit number with leading zeros (0000, 0001, 0002...)");
+          g_logger.fatal("Error parsing input file: you cannot have more than one input file.\nTip: If you want to use a sequance of images, specify a file pattern e.g. 'frames/frame_%04d.png', where %04d means a 4 digit number with leading zeros (0000, 0001, 0002...)");
           throw ProgramError("more_than_one_input_file");
         }
         now = Parsing::positional;
         break;
       }
       case Parsing::filenames: {
+        g_logger.trace("Input file (filenames) '{}' detected", arg);
         if (!args.has_input_file) {
           args.input_file = arg;
           args.has_input_file = true;
         } else {
-          std::println(stderr, "Error parsing input file: you cannot have more than one input file.\nTip: If you want to use a sequance of images, specify a file pattern e.g. 'frames/frame_%04d.png', where %04d means a 4 digit number with leading zeros (0000, 0001, 0002...)");
+          g_logger.fatal("Error parsing input file: you cannot have more than one input file.\nTip: If you want to use a sequance of images, specify a file pattern e.g. 'frames/frame_%04d.png', where %04d means a 4 digit number with leading zeros (0000, 0001, 0002...)");
           throw ProgramError("more_than_one_input_file");
         }
         break;
       }
       case Parsing::output: {
+        g_logger.trace("Output file '{}' detected", arg);
         if (!args.has_output_file) {
           args.output_file = arg;
           args.has_output_file = true;
         } else {
-          std::println(stderr, "Error parsing output file: you cannot have more than one output file");
+          g_logger.fatal("Error parsing output file: you cannot have more than one output file");
           throw ProgramError("more_than_one_output_file");
         }
         now = Parsing::positional;
         break;
       }
       case Parsing::game: {
+        g_logger.trace("Game file '{}' detected", arg);
         if (!args.has_game_file) {
           args.game_file = arg;
           args.has_game_file = true;
         } else {
-          std::println(stderr, "Error parsing game file: you cannot have more than one game file");
+          g_logger.fatal("Error parsing game file: you cannot have more than one game file");
           throw ProgramError("more_than_one_game_file");
         }
         now = Parsing::positional;
@@ -184,18 +193,18 @@ ProgramArgs parse_args(std::vector<std::string>& raw_args) {
           try {
             last_frame = std::stoll(arg);
             if (last_frame < 1) {
-              std::println(stderr, "Error parsing frame threshold: specified value is negative or zero.");
+              g_logger.fatal("Error parsing frame threshold: specified value is negative or zero.");
               throw ProgramError("threshold_leq_zero");
             }
           } catch (const std::invalid_argument&) {
-            std::println(stderr, "Error parsing frame threshold: specified value is not a valid number.");
+            g_logger.fatal("Error parsing frame threshold: specified value is not a valid number.");
             throw ProgramError("threshold_nan");
           } catch (const std::out_of_range&) {
-            std::println(stderr, "Error parsing frame threshold: specified value exceeds max value of int64_t ({})", INT64_MAX);
+            g_logger.fatal("Error parsing frame threshold: specified value exceeds max value of int64_t ({})", INT64_MAX);
             throw ProgramError("threshold_out_of_range");
           }
         } else {
-          std::println(stderr, "Error parsing frame threshold: you cannot have more than one threshold");
+          g_logger.fatal("Error parsing frame threshold: you cannot have more than one threshold");
           throw ProgramError("more_than_one_threshold");
         }
         now = Parsing::positional;
@@ -204,6 +213,7 @@ ProgramArgs parse_args(std::vector<std::string>& raw_args) {
     }
   }
   if (args.input_file.contains("%")) {
+    g_logger.trace("Input file {} is an image sequence ('%' detected)", args.input_file);
     args.is_input_image_sequence = true;
   }
   check_files(args, last_frame);
@@ -221,6 +231,7 @@ ProgramArgs parse_args(std::vector<std::string>& raw_args) {
 }
 
 void filter_args(std::vector<std::string>& raw_args) {
+  g_logger.trace("Entered convert2pgn::Parsor::filter_args");
   merge_single_quotes(raw_args);
   std::vector<std::string> filtered_args;
   for (auto&& [index, arg] : raw_args | std::views::enumerate) {
@@ -232,16 +243,18 @@ void filter_args(std::vector<std::string>& raw_args) {
       continue;
     }
     if (arg.starts_with("-") && arg.contains("=")) {
-      std::println(stderr, "Error parsing flags: --key=value format is not supported, use --key value");
+      g_logger.fatal("Error parsing flags: --key=value format is not supported yet, use --key value");
       throw ProgramError("invalid_arg");
     } else {
       filtered_args.push_back(arg);
     }
   }
   raw_args = filtered_args;
+  g_logger.trace("Exited convert2pgn::Parsor::filter_args");
 }
 
 void merge_single_quotes(std::vector<std::string>& raw_args) {
+  g_logger.trace("Entered convert2pgn::Parsor::merge_single_quote");
   std::vector<std::string> merged_args;
   bool looking_for_single_quote = false;
   std::string single_quoted_arg = "";
@@ -249,12 +262,14 @@ void merge_single_quotes(std::vector<std::string>& raw_args) {
     if (arg.starts_with("'") && !arg.ends_with("'") && !looking_for_single_quote) {
       looking_for_single_quote = true;
       single_quoted_arg += arg;
+      g_logger.debug("Found unclosed single quote: {}", arg);
       continue;
     }
     if (looking_for_single_quote) {
       single_quoted_arg += " " + arg;
       if (arg.ends_with("'")) {
         looking_for_single_quote = false;
+        g_logger.debug("Closed single quote: {}", single_quoted_arg);
       } else {
         continue;
       }
@@ -267,10 +282,11 @@ void merge_single_quotes(std::vector<std::string>& raw_args) {
     }
   }
   if (looking_for_single_quote) {
-    std::println(stderr, "Error parsing flags: single quote is 'not closed");
+    g_logger.fatal("Error parsing flags: single quote is 'not closed");
     throw ProgramError("invalid_arg");
   }
   raw_args = merged_args;
+  g_logger.trace("Exited convert2pgn::Parsor::merge_single_quote");
 }
 
 std::vector<int64_t> parse_frame_range(const std::string& raw_range, std::string_view range_type, int64_t last_frame) {
@@ -280,7 +296,7 @@ std::vector<int64_t> parse_frame_range(const std::string& raw_range, std::string
     if (range.size() == 1) {
       int64_t frame = std::stoll(range.at(0));
       if (frame < 1) {
-        std::println(stderr, "Error parsing {}: one of the arguments is negative or zero.", range_type);
+        g_logger.fatal("Error parsing {}: one of the arguments is negative or zero.", range_type);
         throw ProgramError("range_arg_leq_zero");
       }
       processed_range.push_back(frame);
@@ -293,7 +309,7 @@ std::vector<int64_t> parse_frame_range(const std::string& raw_range, std::string
       }
       if (range.at(1).empty()) {
         if (last_frame == -1) {
-          std::println(stderr, "Error parsing {}: using open ranges with no game file provided results in a never ending loop. Use --frame-threshold to specify a threshold.", range_type);
+          g_logger.fatal("Error parsing {}: using open ranges with no game file provided results in a never ending loop. Use --frame-threshold to specify a threshold.", range_type);
           throw ProgramError("range_open_without_threshold");
         }
         range_end = last_frame;
@@ -301,11 +317,11 @@ std::vector<int64_t> parse_frame_range(const std::string& raw_range, std::string
         range_end = std::stoll(range.at(1));
       }
       if (range_start < 1 || range_end < 1) {
-        std::println(stderr, "Error parsing {}: one of the arguments is negative or zero.", range_type);
+        g_logger.fatal("Error parsing {}: one of the arguments is negative or zero.", range_type);
         throw ProgramError("range_arg_leq_zero");
       }
       if (range_start > range_end) {
-        std::println(stderr, "Error parsing {}: start of range bigger than end of range.", range_type);
+        g_logger.fatal("Error parsing {}: start of range bigger than end of range.", range_type);
         throw ProgramError("range_start_bigger_than_end");
       }
       for (int64_t i = range_start; i <= range_end; ++i) {
@@ -314,7 +330,7 @@ std::vector<int64_t> parse_frame_range(const std::string& raw_range, std::string
     } else if (range.size() == 3) {
       if (range.at(0).empty() && range.at(1).empty() && range.at(2).empty()) {
         if (last_frame == -1) {
-          std::println(stderr, "Error parsing {}: using open ranges with no game file provided results in a never ending loop. Use --frame-threshold to specify a threshold.", range_type);
+          g_logger.fatal("Error parsing {}: using open ranges with no game file provided results in a never ending loop. Use --frame-threshold to specify a threshold.", range_type);
           throw ProgramError("range_open_without_threshold");
         }
 
@@ -323,18 +339,18 @@ std::vector<int64_t> parse_frame_range(const std::string& raw_range, std::string
         }
 
       } else {
-        std::println(stderr, "Error parsing {}: too many separators", range_type);
+        g_logger.fatal("Error parsing {}: too many separators", range_type);
         throw ProgramError("range_arg_too_many_separators");
       }
     } else {
-      std::println(stderr, "Error parsing {}: too many separators", range_type);
+      g_logger.fatal("Error parsing {}: too many separators", range_type);
       throw ProgramError("range_arg_too_many_separators");
     }
   } catch (const std::invalid_argument&) {
-    std::println(stderr, "Error parsing {}: one of the arguments is not a valid number.", range_type);
+    g_logger.fatal("Error parsing {}: one of the arguments is not a valid number.", range_type);
     throw ProgramError("range_arg_nan");
   } catch (const std::out_of_range&) {
-    std::println(stderr, "Error parsing {}: one of the arguments exceeds max value of int64_t ({})", range_type, INT64_MAX);
+    g_logger.fatal("Error parsing {}: one of the arguments exceeds max value of int64_t ({})", range_type, INT64_MAX);
     throw ProgramError("range_arg_out_of_range");
   }
 
@@ -359,7 +375,7 @@ std::unordered_map<int64_t, int64_t> parse_frame_mappings(const std::vector<std:
   for (const auto& mapping : raw_mappings) {
     std::vector<std::string> split_mapping = mapping | std::views::split(':') | std::ranges::to<std::vector<std::string>>();
     if (split_mapping.size() != 2) {
-      std::println(stderr, "Error parsing Map frames: map must have exactly 1 map separator");
+      g_logger.fatal("Error parsing Map frames: map must have exactly 1 map separator");
       throw ProgramError("mapping_arg_invalid_separators");
     }
     std::vector<int64_t> mapping_frame_range = parse_frame_range(split_mapping[0], "Map frames", last_frame),
@@ -388,19 +404,25 @@ std::unordered_map<int64_t, int64_t> parse_frame_mappings(const std::vector<std:
 }
 
 void check_files(const ProgramArgs& args) {
-  int64_t i_am_a_cute_kittty_nya_OwO = -static_cast<int64_t>(0xDEADC0DE & 0xB00B5) >> 63;
+  g_logger.trace("Entered convert2pgn::Parsor::check_files (1 arg)");
+  int64_t i_am_a_cute_kittty_nya_OwO = -(0xDEADC0DE & 0xB00B5 | 0x600FBALL) >> 63;
+  g_logger.debug("int64_t i_am_a_cute_kittty_nya_OwO = -(0xDEADC0DE & 0xB00B5 | 0x600FBALL) >> 63;");
   check_files(args, i_am_a_cute_kittty_nya_OwO);
+  g_logger.trace("Exited convert2pgn::Parsor::check_files (1 arg)");
 }
 
 void check_files(const ProgramArgs& args, int64_t& last_frame) {
+  g_logger.trace("Entered convert2pgn::Parsor::check_files (2 args)");
   if (args.has_game_file) {
     try {
       std::ifstream game_file;
       game_file.exceptions(std::ios_base::failbit | std::ios_base::badbit);
       game_file.open(args.game_file);
+      g_logger.trace("Opened game file");
       game_file.exceptions(std::ios_base::badbit);
       std::stringstream game;
       game << game_file.rdbuf();
+      g_logger.trace("Read game file");
       ParsorVisitor visitor;
       chess::pgn::StreamParser validator(game);
       validator.readGames(visitor);
@@ -408,32 +430,37 @@ void check_files(const ProgramArgs& args, int64_t& last_frame) {
         last_frame = visitor.halfmove_count;
       } else if (last_frame > visitor.halfmove_count) {
         last_frame = visitor.halfmove_count;
-        std::println(stderr, "Warning: frame threshold can't be bigger than amount of halfmoves in a game file and therefore is overwritten");
+        g_logger.fatal("Warning: frame threshold can't be bigger than amount of halfmoves in a game file and therefore is overwritten");
       }
     } catch (std::ios_base::failure& e) {
-      std::println(stderr, "Error trying to open game file {}: {}\nTip: if your path contains spaces, wrap it in 'single quotes'", args.game_file, e.what());
+      g_logger.fatal("Error trying to open game file {}: {}\nTip: if your path contains spaces, wrap it in 'single quotes'", args.game_file, e.what());
       throw ProgramError("game_file_error");
     } catch (ProgramError&) {
       throw;
     } catch (std::exception& e) {
-      std::println(stderr, "Error trying to parse game file {}: {}", args.game_file, e.what());
+      g_logger.fatal("Error trying to parse game file {}: {}", args.game_file, e.what());
       throw ProgramError("game_file_error");
     }
   }
+  g_logger.trace("Exited convert2pgn::Parsor::check_files (2 args)");
 }
 
 void print_help() {
   constexpr std::string_view help_menu = R"helpmenu(
 convert2pgn - a utility to convert any type of media into a Chess.com compatible PGN animation
   )helpmenu";
-  std::println(help_menu);
+  g_logger.info(help_menu);
 }
 
 void print_version() {
   constexpr std::string_view version_info = R"versioninfo(
 convert2pgn v1.0.0  
+Copyright (C) 2026 Function f(x)
+License GPLv3+: GNU GPL version 3 or later <https://gnu.org/licenses/gpl.html>.
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.
   )versioninfo";
-  std::println(version_info);
+  g_logger.info(version_info);
 }
 
 }  // namespace Parsor

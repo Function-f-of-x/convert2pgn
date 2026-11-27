@@ -1,8 +1,6 @@
 #pragma once
 #include "configurator.hpp"
 
-namespace Compressor {
-
-using namespace convert2pgn;
+namespace convert2pgn::Compressor {
 
 }  // namespace Compressor

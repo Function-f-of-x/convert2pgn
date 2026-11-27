@@ -3,9 +3,7 @@
 #pragma once
 #include "configurator.hpp"
 
-namespace Parsor {
-
-using namespace convert2pgn;
+namespace convert2pgn::Parsor {
 
 ProgramArgs parse_args(const std::vector<std::string>& raw_args);
 void filter_args(std::vector<std::string>& raw_args);
