@@ -13,7 +13,7 @@ list(PREPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/lib/avcpp")
 add_executable(convert2pgn
   src/main.cpp
   src/parsor.cpp 
-  src/compressor.cpp
+  src/unifier.cpp
 )
 
 find_package(Threads REQUIRED)
