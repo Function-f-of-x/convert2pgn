@@ -114,23 +114,23 @@ class Logger {
       return;
     }
 
-    auto stream = level <= LogLevel::WARN ? stderr : stdout;
+    std::string formatted;
 
     if (verbose_) {
       auto utc = std::chrono::floor<std::chrono::milliseconds>(std::chrono::system_clock::now());
       auto now = std::chrono::zoned_time(std::chrono::current_zone(), utc);
-      std::print(stream, "{}[{:%T}] [{}/{}]: ", log_level_to_ansi(level), now, caller, log_level_to_string(level));
+      formatted += std::format("{}[{:%T}] [{}/{}]: ", log_level_to_ansi(level), now, caller, log_level_to_string(level));
     } else if (level <= LogLevel::WARN) {
-      std::print(stream, "{}[{}/{}]: ", log_level_to_ansi(level), caller, log_level_to_string(level));
+      formatted += std::format("{}[{}/{}]: ", log_level_to_ansi(level), caller, log_level_to_string(level));
     }
 
-    std::print(stream, str, std::forward<Args>(args)...);
+    formatted += std::format(str, std::forward<Args>(args)...);
 
-    if (!log_level_to_ansi().empty()) {
-      std::println(stream, "\x1b[0m");
-    } else {
-      std::println(stream);
+    if (!log_level_to_ansi(level).empty()) {
+      formatted += "\x1b[0m";
     }
+
+    std::print(formatted);
   }
 
   template <typename... Args>
