@@ -43,19 +43,28 @@ class ParsorVisitor : public chess::pgn::Visitor {
   }
 
   void startPgn() override {
+    g_logger.trace("Entered convert2pgn::Parsor::ParsorVisitor::startPgn");
     if (is_game_ended) {
       g_logger.fatal("Error parsing game file: can't have more than one game in a file");
       throw ProgramError("more_than_one_game_in_pgn");
     }
+    g_logger.trace("Exited convert2pgn::Parsor::ParsorVisitor::startPgn");
   }
   void header(std::string_view key, std::string_view value) override {
+    g_logger.trace("Entered convert2pgn::Parsor::ParsorVisitor::header (key={}, value={})", key, value);
     if (key == "FEN") {
       board.setFen(value);
     }
+    g_logger.trace("Exited convert2pgn::Parsor::ParsorVisitor::header");
   }
-  void startMoves() override {}
+  void startMoves() override {
+    g_logger.trace("Entered convert2pgn::Parsor::ParsorVisitor::startMoves");
+    g_logger.trace("Exited convert2pgn::Parsor::ParsorVisitor::startMoves");
+  }
   void endPgn() override {
+    g_logger.trace("Entered convert2pgn::Parsor::ParsorVisitor::endPgn");
     is_game_ended = true;
+    g_logger.trace("Exited convert2pgn::Parsor::ParsorVisitor::endPgn");
   }
 };
 
@@ -227,6 +236,7 @@ ProgramArgs parse_args(std::vector<std::string>& raw_args) {
   if (args.has_map_frames) {
     args.map_frames = parse_frame_mappings(raw_map_frames, last_frame);
   }
+  g_logger.trace("Exited convert2pgn::Parsor::parse_args");
   return args;
 }
 
@@ -290,6 +300,7 @@ void merge_single_quotes(std::vector<std::string>& raw_args) {
 }
 
 std::vector<int64_t> parse_frame_range(const std::string& raw_range, std::string_view range_type, int64_t last_frame) {
+  g_logger.trace("Entered convert2pgn::Parsor::parse_frame_range (raw_range={}, range_type={}, last_frame={})", raw_range, range_type, last_frame);
   std::vector<int64_t> processed_range;
   std::vector<std::string> range = raw_range | std::views::split('~') | std::ranges::to<std::vector<std::string>>();
   try {
@@ -354,10 +365,12 @@ std::vector<int64_t> parse_frame_range(const std::string& raw_range, std::string
     throw ProgramError("range_arg_out_of_range");
   }
 
+  g_logger.trace("Exited convert2pgn::Parsor::parse_frame_range (processed {} frames)", processed_range.size());
   return processed_range;
 }
 
 std::vector<int64_t> parse_frame_filter(const std::vector<std::string>& raw_filters, std::string_view filter_type, int64_t last_frame) {
+  g_logger.trace("Entered convert2pgn::Parsor::parse_frame_filter (filter_type={}, last_frame={})", filter_type, last_frame);
   std::vector<int64_t> processed_filters;
   for (auto& filter : raw_filters) {
     std::vector<int64_t> range = parse_frame_range(filter, filter_type, last_frame);
@@ -367,10 +380,12 @@ std::vector<int64_t> parse_frame_filter(const std::vector<std::string>& raw_filt
   auto [first, last] = std::ranges::unique(processed_filters);
   processed_filters.erase(first, last);
 
+  g_logger.trace("Exited convert2pgn::Parsor::parse_frame_filter (processed {} filters)", processed_filters.size());
   return processed_filters;
 }
 
 std::unordered_map<int64_t, int64_t> parse_frame_mappings(const std::vector<std::string>& raw_mappings, int64_t last_frame) {
+  g_logger.trace("Entered convert2pgn::Parsor::parse_frame_mappings (last_frame={})", last_frame);
   std::unordered_map<int64_t, int64_t> processed_mappings;
   for (const auto& mapping : raw_mappings) {
     std::vector<std::string> split_mapping = mapping | std::views::split(':') | std::ranges::to<std::vector<std::string>>();
@@ -400,6 +415,7 @@ std::unordered_map<int64_t, int64_t> parse_frame_mappings(const std::vector<std:
       }
     }
   }
+  g_logger.trace("Exited convert2pgn::Parsor::parse_frame_mappings (processed {} mappings)", processed_mappings.size());
   return processed_mappings;
 }
 

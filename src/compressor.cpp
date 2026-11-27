@@ -9,6 +9,7 @@
 namespace convert2pgn::Compressor {
 
 void compress(const ProgramArgs& args) {
+  g_logger.trace("Entered convert2pgn::Compressor::compress");
   std::error_code error;
 
   av::FormatContext context;
@@ -21,13 +22,13 @@ void compress(const ProgramArgs& args) {
 
   context.openInput(args.input_file, options, error);
   if (error) {
-    std::println(stderr, "[COMPRESSOR] Error opening input file {}: {}", args.input_file, error.message());
+    g_logger.fatal("Error opening input file {}: {}", args.input_file, error.message());
     throw ProgramError("input_file_error");
   }
 
   context.findStreamInfo(error);
   if (error) {
-    std::println(stderr, "[COMPRESSOR] Error finding stream info in input file {}: {}", args.input_file, error.message());
+    g_logger.fatal("Error finding stream info in input file {}: {}", args.input_file, error.message());
     throw ProgramError("input_file_error");
   }
   
